@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>RC Control UI</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Inter:wght@400;700&display=swap"
+        rel="stylesheet">
+</head>
+
+<body>
+    <div id="app">
+        <!-- Top Left Aux Controls -->
+        <div class="top-left-aux">
+            <div style="display: flex; gap: 12px; flex-direction: row;">
+                <div class="dash-btn" id="btn-light">
+                    <span class="icon">💡</span><span>Light</span>
+                    <div class="key-tag">L</div>
+                </div>
+                <div class="dash-btn" id="btn-wiper">
+                    <span class="icon">🌧️</span><span>Wiper</span>
+                    <div class="key-tag">M</div>
+                </div>
+            </div>
+            <div class="dash-btn" id="btn-park">
+                <span class="icon">🅿️</span><span>Park</span>
+                <div class="key-tag">P</div>
+            </div>
+            <div class="dash-btn" id="btn-horn">
+                <span class="icon">📯</span><span>Horn</span>
+                <div class="key-tag">H</div>
+            </div>
+            <div class="dash-btn" id="btn-indicator">
+                <span class="icon">↔️</span><span>Ind</span>
+                <div class="key-tag">I</div>
+            </div>
+        </div>
+
+        <!-- Top Right Aux Controls -->
+        <div class="top-right-aux">
+            <div class="dash-btn ai-btn" id="btn-analyze">
+                <span class="icon">🧠</span><span>Analyze</span>
+            </div>
+            <div class="dash-btn" id="btn-settings">
+                <span class="icon">⚙️</span><span>Settings</span>
+            </div>
+        </div>
+
+        <!-- Modals -->
+        <div class="modal-overlay" id="modal-settings">
+            <div class="modal">
+                <div class="modal-header">
+                    <h3>⚙️ AI Settings</h3>
+                    <button class="close-btn" id="close-settings">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <label>Gemini API Key</label>
+                    <input type="password" id="gemini-api-key" placeholder="Enter API Key" autocomplete="off">
+                    <button id="save-settings" class="primary-btn">Save</button>
+                    <p class="modal-hint">Your key is stored locally in your browser.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal-overlay" id="modal-ai-feedback">
+            <div class="modal ai-modal">
+                <div class="modal-header">
+                    <h3>🧠 Driving Instructor</h3>
+                    <button class="close-btn" id="close-ai-feedback">&times;</button>
+                </div>
+                <div class="modal-body" id="ai-feedback-content">
+                    <p>Click "Analyze" to evaluate your current session.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- FPV Display Area -->
+        <div class="fpv-container">
+            <div class="fpv-stream">
+                <div class="overlay" id="fpv-overlay">
+                    <!-- Wiper Module -->
+                    <div class="wiper-pivot" id="wiper-system">
+                        <div class="wiper-blade"></div>
+                    </div>
+                </div>
+                <img src="http://172.30.38.110:81/stream" id="fpv-camera" alt="ESP32-CAM Stream" />
+            </div>
+        </div>
+
+        <!-- Dashboard Widgets (Right of Screen) -->
+        <div class="dashboard-panel">
+            <!-- Large Speedo -->
+            <div class="gauge large-gauge speedo">
+                <div class="gauge-ring"></div>
+                <div class="gauge-center">
+                    <span id="speed-val">0</span>
+                    <span class="unit">KM/H</span>
+                </div>
+                <div class="gauge-needle" id="needle-speed"></div>
+            </div>
+            <div class="small-gauges">
+                <!-- Fuel Meter -->
+                <div class="gauge fuel">
+                    <div class="gauge-ring"></div>
+                    <div class="gauge-center">
+                        <span id="fuel-val">100</span>
+                        <span class="unit">%</span>
+                        <span class="unit-label"
+                            style="font-size: 8px; color: #ef4444; margin-top: 5px; font-family: 'Inter', sans-serif; font-weight: bold;">FUEL</span>
+                    </div>
+                    <div class="gauge-needle" id="needle-fuel"></div>
+                </div>
+                <!-- RPM -->
+                <div class="gauge rpm">
+                    <div class="gauge-ring"></div>
+                    <div class="gauge-center">
+                        <span id="rpm-val">800</span>
+                        <span class="unit">RPM</span>
+                    </div>
+                    <div class="gauge-needle" id="needle-rpm"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Controls Area -->
+        <div class="controls">
+            <!-- Left Pedals Group -->
+            <div class="left-controls">
+                <div class="pedal-container">
+                    <label>CLUTCH</label>
+                    <div class="pedal-button clutch" id="pedal-clutch">
+                        <div class="pedal-surface">
+                            <span class="key-hint">F</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="pedal-container">
+                    <label>BRAKE</label>
+                    <div class="pedal-button brake" id="pedal-brake">
+                        <div class="pedal-surface">
+                            <span class="key-hint">S</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="pedal-container">
+                    <label>THROTTLE</label>
+                    <div class="pedal-button throttle" id="pedal-throttle">
+                        <div class="pedal-surface">
+                            <span class="key-hint">W</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Notifications Center -->
+            <div class="notification-center" id="notification-center"></div>
+
+            <!-- Right Steering Group -->
+            <div class="right-controls">
+                <!-- Gear Shifter next to steering -->
+                <div class="gear-shifter-container">
+                    <div class="gear-shifter" id="gear-shifter">
+                        <button class="gear-btn" data-gear="R">R</button>
+                        <button class="gear-btn active" data-gear="1">1</button>
+                        <button class="gear-btn" data-gear="2">2</button>
+                        <button class="gear-btn" data-gear="3">3</button>
+                        <button class="gear-btn" data-gear="4">4</button>
+                    </div>
+                </div>
+
+                <!-- Steering Wheel -->
+                <div class="steering-frame" id="steering-frame">
+                    <div class="steering-hints">
+                        <span class="key-hint left-arrow">◀</span>
+                        <span class="key-hint right-arrow">▶</span>
+                    </div>
+                    <div class="steering-wheel smooth-return" id="steering-wheel">
+                        <div class="wheel-center">
+                        </div>
+                        <div class="wheel-marker"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+
+</html>
