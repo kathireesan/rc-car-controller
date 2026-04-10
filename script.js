@@ -4,6 +4,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function logMistake(msg) {
         drivingMistakes.push(msg);
+
+        // Voice Notification
+        if (audioEnabled && 'speechSynthesis' in window) {
+            // Cancel any previous speech so new alerts play immediately
+            window.speechSynthesis.cancel();
+            
+            // Extract a short phrase for speech
+            let speechText = msg;
+            if (msg.includes("Over speed!")) speechText = "Over speed!";
+            else if (msg.includes("FRONT AEB")) speechText = "Front emergency braking triggered!";
+            else if (msg.includes("REAR AEB")) speechText = "Rear emergency braking triggered!";
+            else if (msg.includes("Oversteering!")) speechText = "Over steering!";
+            else if (msg.includes("Sudden braking")) speechText = "Sudden braking!";
+            else if (msg.includes("without indicator")) speechText = "Turned without indicator!";
+            else if (msg.includes("engage the parking brake")) speechText = "Please engage parking brake.";
+            else if (msg.includes("stalls the engine")) speechText = "Engine stalled!";
+            else if (msg.includes("Reverse while moving forward")) speechText = "Dangerous shift to reverse!";
+            else if (msg.includes("Skipped a gear")) speechText = "Skipped a gear!";
+
+            const utterance = new SpeechSynthesisUtterance(speechText);
+            window.speechSynthesis.speak(utterance);
+        }
+
         if (notificationCenter) {
             const el = document.createElement('div');
             el.className = 'notification-item';
@@ -605,6 +628,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let stopTime = null;
     let lastParkMistake = 0;
     let lastGearStallMistake = 0;
+    let lastOverspeedMistake = 0;
 
     setInterval(() => {
         let throttling = keysMap['w'] || throttlePedal.classList.contains('active');
@@ -633,6 +657,14 @@ document.addEventListener('DOMContentLoaded', () => {
             if (Date.now() - lastOversteerMistake > 5000) {
                 logMistake(`Oversteering! Angle ${Math.round(currentAngle)}° is too high for ${Math.round(simSpeed)} km/h.`);
                 lastOversteerMistake = Date.now();
+            }
+        }
+
+        // Overspeeding (> 80 km/h)
+        if (simSpeed > 80) {
+            if (Date.now() - lastOverspeedMistake > 5000) {
+                logMistake(`Over speed! You are driving at ${Math.round(simSpeed)} km/h. Please slow down.`);
+                lastOverspeedMistake = Date.now();
             }
         }
 
