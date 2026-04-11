@@ -13,6 +13,8 @@ document.addEventListener('DOMContentLoaded', () => {
             // Extract a short phrase for speech
             let speechText = msg;
             if (msg.includes("Over speed!")) speechText = "Over speed!";
+            else if (msg.includes("obstacle in front of the car")) speechText = "Obstacle in front of the car!";
+            else if (msg.includes("cant stop immediately because a car is coming behind")) speechText = "cant stop immediately because a car is coming behind";
             else if (msg.includes("FRONT AEB")) speechText = "Front emergency braking triggered!";
             else if (msg.includes("REAR AEB")) speechText = "Rear emergency braking triggered!";
             else if (msg.includes("Oversteering!")) speechText = "Over steering!";
@@ -693,12 +695,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- AEB (Autonomous Emergency Braking) System ---
     let aebActive = false;
+    let rearTailgateWarned = false;
+
     setInterval(async () => {
         try {
             const resp = await fetch(ESP8266_IP + '/sensors');
             const data = await resp.json();
             
             let movingForward = keysMap['w'] || throttlePedal.classList.contains('active');
+            let braking = keysMap['s'] || brakePedal.classList.contains('active');
             let isReverse = currentGearLabel === 'R';
 
             // Front collision avoidance
@@ -707,7 +712,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 keysMap['w'] = false;
                 throttlePedal.classList.remove('active');
                 if (!aebActive) {
-                    logMistake(`🚨 FRONT AEB TRIGGERED! Obstacle at ${Math.round(data.front)}cm. Auto-braking applied.`);
+                    logMistake(`obstacle in front of the car`);
                     playTick();
                     aebActive = true;
                 }
@@ -724,6 +729,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             } else {
                 aebActive = false;
+            }
+
+            // Tailgate warning logic
+            if (data.back < 40 && !isReverse && simSpeed > 2) {
+                if (braking) {
+                    if (!rearTailgateWarned) {
+                        logMistake(`cant stop immediately because a car is coming behind`);
+                        playTick();
+                        rearTailgateWarned = true;
+                    }
+                } else {
+                    rearTailgateWarned = false;
+                }
+            } else {
+                rearTailgateWarned = false;
             }
         } catch (e) {
             // Ignore failures if ESP is unavailable or sensors aren't wired yet
