@@ -4,6 +4,19 @@
 const char* ssid = "Redmi 12 5G";
 const char* password = "1357924680";
 
+// -------- ULTRASONIC PINS --------
+// Front Ultrasonic Sensor
+const int trigPinFront = 5;  // GPIO5 (D1)
+const int echoPinFront = 12; // GPIO12 (D6)
+
+// Back Ultrasonic Sensor
+const int trigPinBack = 15;  // GPIO15 (D8)
+const int echoPinBack = 3;   // GPIO3 (RX)
+
+long distFront = 999;
+long distBack = 999;
+unsigned long lastSensorRead = 0;
+
 ESP8266WebServer server(80);
 
 // -------- PINS (No Enable Pins) --------
@@ -57,6 +70,23 @@ void handleRoot() {
   server.send(200, "text/plain", "RC Car Ready");
 }
 
+void handleSensors() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  String json = "{\"front\": " + String(distFront) + ", \"back\": " + String(distBack) + "}";
+  server.send(200, "application/json", json);
+}
+
+long readDistance(int trig, int echo) {
+  digitalWrite(trig, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trig, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trig, LOW);
+  long duration = pulseIn(echo, HIGH, 30000); // 30ms timeout ~ 5 meters
+  if (duration == 0) return 999;
+  return duration * 0.034 / 2;
+}
+
 void handleDrive() {
   server.sendHeader("Access-Control-Allow-Origin", "*");
 
@@ -85,6 +115,14 @@ void handleDrive() {
   int driveDir = 0;
   if (throttle > 3) {
     driveDir = (gear == "R") ? -1 : 1;
+  }
+
+  // ======== EMERGENCY BRAKE (Hardware-level) ========
+  if (driveDir == 1 && distFront < 20) {
+    driveDir = 0; // Force stop if object in front
+  }
+  if (driveDir == -1 && distBack < 20) {
+    driveDir = 0; // Force stop if object in back
   }
 
   // ======== STEERING + DRIVE ========
@@ -137,6 +175,11 @@ void setup() {
   pinMode(lightPin, OUTPUT);
   pinMode(hornPin, OUTPUT);
 
+  pinMode(trigPinFront, OUTPUT);
+  pinMode(echoPinFront, INPUT);
+  pinMode(trigPinBack, OUTPUT);
+  pinMode(echoPinBack, INPUT);
+
   stopAll();
   digitalWrite(lightPin, LOW);
   digitalWrite(hornPin, LOW);
@@ -162,6 +205,7 @@ void setup() {
 
   server.on("/", handleRoot);
   server.on("/drive", handleDrive);
+  server.on("/sensors", handleSensors);
   server.begin();
   Serial.println("HTTP server started");
 }
@@ -169,4 +213,11 @@ void setup() {
 // -------- LOOP --------
 void loop() {
   server.handleClient();
+  
+  // Read sensors non-blocking every 100ms
+  if (millis() - lastSensorRead > 100) {
+    distFront = readDistance(trigPinFront, echoPinFront);
+    distBack = readDistance(trigPinBack, echoPinBack);
+    lastSensorRead = millis();
+  }
 }
