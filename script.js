@@ -4,6 +4,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function logMistake(msg) {
         drivingMistakes.push(msg);
+
+        // Voice Notification
+        if (audioEnabled && 'speechSynthesis' in window) {
+            // Cancel any previous speech so new alerts play immediately
+            window.speechSynthesis.cancel();
+            
+            // Extract a short phrase for speech
+            let speechText = msg;
+            if (msg.includes("Over speed!")) speechText = "Over speed!";
+            else if (msg.includes("obstacle in front of the car")) speechText = "Obstacle in front of the car!";
+            else if (msg.includes("cant stop immediately because a car is coming behind")) speechText = "cant stop immediately because a car is coming behind";
+            else if (msg.includes("FRONT AEB")) speechText = "Front emergency braking triggered!";
+            else if (msg.includes("REAR AEB")) speechText = "Rear emergency braking triggered!";
+            else if (msg.includes("Oversteering!")) speechText = "Over steering!";
+            else if (msg.includes("Sudden braking")) speechText = "Sudden braking!";
+            else if (msg.includes("without indicator")) speechText = "Turned without indicator!";
+            else if (msg.includes("engage the parking brake")) speechText = "Please engage parking brake.";
+            else if (msg.includes("stalls the engine")) speechText = "Engine stalled!";
+            else if (msg.includes("Reverse while moving forward")) speechText = "Dangerous shift to reverse!";
+            else if (msg.includes("Skipped a gear")) speechText = "Skipped a gear!";
+
+            const utterance = new SpeechSynthesisUtterance(speechText);
+            window.speechSynthesis.speak(utterance);
+        }
+
         if (notificationCenter) {
             const el = document.createElement('div');
             el.className = 'notification-item';
@@ -15,8 +40,17 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- ESP32-CAM Resolution Optimizer ---
+    // --- Initial Config ---
+    let CAM_IP = localStorage.getItem('cam_ip') || '172.30.38.110';
+    let ESP8266_IP = localStorage.getItem('esp_ip') || 'http://172.30.38.46';
+
     const fpvCamera = document.getElementById('fpv-camera');
+    if (fpvCamera) {
+        let camBaseUrl = CAM_IP.startsWith('http') ? CAM_IP : 'http://' + CAM_IP;
+        fpvCamera.src = camBaseUrl + ':81/stream';
+    }
+
+    // --- ESP32-CAM Resolution Optimizer ---
     if (fpvCamera && fpvCamera.src.includes(':81/stream')) {
         try {
             const camUrl = new URL(fpvCamera.src);
@@ -106,7 +140,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- UI Interactions ---
 
     // --- ESP8266 Server Configuration ---
-    const ESP8266_IP = 'http://172.30.38.46'; // Logic Server
+    // ESP8266_IP is configured at the top of the file
     
     // Helper to send non-blocking HTTP GET requests to ESP8266
     function sendCommand(endpoint, params) {
@@ -157,7 +191,8 @@ document.addEventListener('DOMContentLoaded', () => {
         'p': document.getElementById('btn-park'),
         'h': document.getElementById('btn-horn'), // Hold-to-activate
         'i': document.getElementById('btn-indicator'),
-        'm': document.getElementById('btn-wiper')
+        'm': document.getElementById('btn-wiper'),
+        'c': document.getElementById('btn-cruise')
     };
 
     const wiperSys = document.getElementById('wiper-system');
@@ -188,6 +223,9 @@ document.addEventListener('DOMContentLoaded', () => {
     uiAux['p'].addEventListener('click', () => toggleAux('p'));
     uiAux['i'].addEventListener('click', () => toggleAux('i'));
     uiAux['m'].addEventListener('click', () => toggleAux('m'));
+    if (uiAux['c']) {
+        uiAux['c'].addEventListener('click', () => toggleCruise());
+    }
 
     ['mousedown', 'touchstart'].forEach(evt => {
         uiAux['h'].addEventListener(evt, (e) => {
@@ -325,6 +363,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (k === 'p') toggleAux('p');
             if (k === 'i') toggleAux('i');
             if (k === 'm') toggleAux('m');
+            if (k === 'c') toggleCruise();
             if (k === 'h') {
                 uiAux['h'].classList.add('active');
                 startHorn();
@@ -390,6 +429,52 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // Cruise Control State
+    let cruiseActive = false;
+    let cruiseSpeed = 0;
+
+    function toggleCruise() {
+        if (cruiseActive) {
+            cruiseActive = false;
+            uiAux['c'].classList.remove('active');
+            
+            // Show notification
+            const el = document.createElement('div');
+            el.className = 'notification-item';
+            el.textContent = "Cruise control deactivated.";
+            notificationCenter.appendChild(el);
+            setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 5000);
+            
+            if (audioEnabled && 'speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+                window.speechSynthesis.speak(new SpeechSynthesisUtterance("Cruise control deactivated"));
+            }
+        } else {
+            if (simSpeed > 10 && currentGearLabel !== 'R') {
+                cruiseActive = true;
+                cruiseSpeed = simSpeed;
+                uiAux['c'].classList.add('active');
+                
+                const el = document.createElement('div');
+                el.className = 'notification-item';
+                el.textContent = `Cruise control engaged at ${Math.round(cruiseSpeed)} km/h.`;
+                notificationCenter.appendChild(el);
+                setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 5000);
+
+                if (audioEnabled && 'speechSynthesis' in window) {
+                    window.speechSynthesis.cancel();
+                    window.speechSynthesis.speak(new SpeechSynthesisUtterance("Cruise control engaged"));
+                }
+            } else {
+                const el = document.createElement('div');
+                el.className = 'notification-item';
+                el.textContent = "Speed too low to engage cruise control.";
+                notificationCenter.appendChild(el);
+                setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 5000);
+            }
+        }
+    }
+
     // Dashboard Engine Simulation Logic
     let simSpeed = 0, simRpm = 800;
     let fuelLevel = 100;
@@ -413,6 +498,11 @@ document.addEventListener('DOMContentLoaded', () => {
         let braking = keysMap['s'] || brakePedal.classList.contains('active');
         let clutching = keysMap['f'] || clutchPedal.classList.contains('active');
 
+        // Disengage cruise control if user presses a pedal
+        if (cruiseActive && (throttling || braking || clutching)) {
+            toggleCruise(); // This will deactivate since cruiseActive is true
+        }
+
         let maxSpeed = gearMaxSpeed[currentGearLabel] || 0;
         
         if (clutching) {
@@ -424,21 +514,36 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             simSpeed -= 0.05; 
         } else {
-            if (throttling) {
-                if (simSpeed < maxSpeed) {
+            if (cruiseActive) {
+                if (simSpeed < cruiseSpeed) {
                     simSpeed += 0.4;
+                } else if (simSpeed > cruiseSpeed) {
+                    simSpeed -= 0.2;
                 }
-                fuelLevel -= 0.02;
+                fuelLevel -= 0.015;
+                
+                let speedRatio = simSpeed / maxSpeed;
+                if (speedRatio < 0) speedRatio = 0;
+                if (speedRatio > 1.1) speedRatio = 1.1; 
+                let targetRpm = 800 + (speedRatio * 6000); 
+                simRpm += (targetRpm - simRpm) * 0.2;
             } else {
-                simSpeed -= 0.2;
+                if (throttling) {
+                    if (simSpeed < maxSpeed) {
+                        simSpeed += 0.4;
+                    }
+                    fuelLevel -= 0.02;
+                } else {
+                    simSpeed -= 0.2;
+                }
+                
+                let speedRatio = simSpeed / maxSpeed;
+                if (speedRatio < 0) speedRatio = 0;
+                if (speedRatio > 1.1) speedRatio = 1.1; 
+                
+                let targetRpm = 800 + (speedRatio * 6000); 
+                simRpm += (targetRpm - simRpm) * 0.2;
             }
-            
-            let speedRatio = simSpeed / maxSpeed;
-            if (speedRatio < 0) speedRatio = 0;
-            if (speedRatio > 1.1) speedRatio = 1.1; 
-            
-            let targetRpm = 800 + (speedRatio * 6000); 
-            simRpm += (targetRpm - simRpm) * 0.2;
         }
 
         if (braking) {
@@ -533,7 +638,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }, 150);
 
-    // --- AI Driving Instructor Module ---
+    // --- AI Driving Instructor Module / Settings ---
     const btnSettings = document.getElementById('btn-settings');
     const btnAnalyze = document.getElementById('btn-analyze');
     const modalSettings = document.getElementById('modal-settings');
@@ -541,17 +646,38 @@ document.addEventListener('DOMContentLoaded', () => {
     const closeSettings = document.getElementById('close-settings');
     const closeAiFeedback = document.getElementById('close-ai-feedback');
     const geminiInput = document.getElementById('gemini-api-key');
+    const camIpInput = document.getElementById('cam-ip');
+    const espIpInput = document.getElementById('esp-ip');
     const saveSettings = document.getElementById('save-settings');
     const aiFeedbackContent = document.getElementById('ai-feedback-content');
 
     // UI Bindings
     if (btnSettings && modalSettings) {
         btnSettings.addEventListener('click', () => {
+            if (camIpInput) camIpInput.value = localStorage.getItem('cam_ip') || CAM_IP;
+            if (espIpInput) espIpInput.value = localStorage.getItem('esp_ip') || ESP8266_IP;
             geminiInput.value = localStorage.getItem('gemini_api_key') || '';
             modalSettings.classList.add('active');
         });
         closeSettings.addEventListener('click', () => modalSettings.classList.remove('active'));
         saveSettings.addEventListener('click', () => {
+            if (camIpInput) {
+                let cip = camIpInput.value.trim();
+                if (cip) {
+                    localStorage.setItem('cam_ip', cip);
+                    CAM_IP = cip;
+                    let camBaseUrl = CAM_IP.startsWith('http') ? CAM_IP : 'http://' + CAM_IP;
+                    if (fpvCamera) fpvCamera.src = camBaseUrl + ':81/stream';
+                }
+            }
+            if (espIpInput) {
+                let eip = espIpInput.value.trim();
+                if (eip) {
+                    if (!eip.startsWith('http')) eip = 'http://' + eip;
+                    localStorage.setItem('esp_ip', eip);
+                    ESP8266_IP = eip;
+                }
+            }
             localStorage.setItem('gemini_api_key', geminiInput.value);
             modalSettings.classList.remove('active');
         });
@@ -605,6 +731,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let stopTime = null;
     let lastParkMistake = 0;
     let lastGearStallMistake = 0;
+    let lastOverspeedMistake = 0;
 
     setInterval(() => {
         let throttling = keysMap['w'] || throttlePedal.classList.contains('active');
@@ -636,6 +763,14 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
+        // Overspeeding (> 80 km/h)
+        if (simSpeed > 80) {
+            if (Date.now() - lastOverspeedMistake > 5000) {
+                logMistake(`Over speed! You are driving at ${Math.round(simSpeed)} km/h. Please slow down.`);
+                lastOverspeedMistake = Date.now();
+            }
+        }
+
         // Engine Stall on High Gear Start
         if (throttling && simSpeed < 2 && (currentGearLabel === '3' || currentGearLabel === '4')) {
             if (Date.now() - lastGearStallMistake > 5000) {
@@ -661,12 +796,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- AEB (Autonomous Emergency Braking) System ---
     let aebActive = false;
+    let rearTailgateWarned = false;
+
     setInterval(async () => {
         try {
             const resp = await fetch(ESP8266_IP + '/sensors');
             const data = await resp.json();
             
             let movingForward = keysMap['w'] || throttlePedal.classList.contains('active');
+            let braking = keysMap['s'] || brakePedal.classList.contains('active');
             let isReverse = currentGearLabel === 'R';
 
             // Front collision avoidance
@@ -675,7 +813,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 keysMap['w'] = false;
                 throttlePedal.classList.remove('active');
                 if (!aebActive) {
-                    logMistake(`🚨 FRONT AEB TRIGGERED! Obstacle at ${Math.round(data.front)}cm. Auto-braking applied.`);
+                    logMistake(`obstacle in front of the car`);
                     playTick();
                     aebActive = true;
                 }
@@ -692,6 +830,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             } else {
                 aebActive = false;
+            }
+
+            // Tailgate warning logic
+            if (data.back < 40 && !isReverse && simSpeed > 2) {
+                if (braking) {
+                    if (!rearTailgateWarned) {
+                        logMistake(`cant stop immediately because a car is coming behind`);
+                        playTick();
+                        rearTailgateWarned = true;
+                    }
+                } else {
+                    rearTailgateWarned = false;
+                }
+            } else {
+                rearTailgateWarned = false;
             }
         } catch (e) {
             // Ignore failures if ESP is unavailable or sensors aren't wired yet

@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -36,6 +35,10 @@
                 <span class="icon">↔️</span><span>Ind</span>
                 <div class="key-tag">I</div>
             </div>
+            <div class="dash-btn" id="btn-cruise">
+                <span class="icon">⏱️</span><span>Cruise</span>
+                <div class="key-tag">C</div>
+            </div>
         </div>
 
         <!-- Top Right Aux Controls -->
@@ -52,14 +55,18 @@
         <div class="modal-overlay" id="modal-settings">
             <div class="modal">
                 <div class="modal-header">
-                    <h3>⚙️ AI Settings</h3>
+                    <h3>⚙️ Settings</h3>
                     <button class="close-btn" id="close-settings">&times;</button>
                 </div>
                 <div class="modal-body">
+                    <label>Camera IP (ESP32-CAM)</label>
+                    <input type="text" id="cam-ip" placeholder="192.168.1.110" autocomplete="off" style="margin-bottom: 10px;">
+                    <label>Car Logic IP (ESP8266)</label>
+                    <input type="text" id="esp-ip" placeholder="http://192.168.1.100" autocomplete="off" style="margin-bottom: 10px;">
                     <label>Gemini API Key</label>
                     <input type="password" id="gemini-api-key" placeholder="Enter API Key" autocomplete="off">
                     <button id="save-settings" class="primary-btn">Save</button>
-                    <p class="modal-hint">Your key is stored locally in your browser.</p>
+                    <p class="modal-hint">Settings are stored locally in your browser.</p>
                 </div>
             </div>
         </div>
